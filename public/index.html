@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#132b29">
+  <title>Kart Friends — balap bareng di browser</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand"><span class="brand-mark" aria-hidden="true">✦</span><span>KART<span class="brand-accent">FRIENDS</span></span><small>ARCADE RACING CLUB</small></div>
+      <div class="top-right"><span class="pill"><span id="connectionDot" class="dot"></span><span id="connectionText">Menghubungkan</span></span><button id="leaveBtn" class="text-button hidden">Keluar ruang</button></div>
+    </header>
+    <main class="stage" id="stage">
+      <canvas id="gameCanvas" aria-label="Lintasan balap Kart Friends"></canvas>
+      <div class="stage-vignette" aria-hidden="true"></div>
+
+      <section id="homePanel" class="panel home-panel">
+        <div class="eyebrow"><span class="eyebrow-line"></span> GAME MALAM INI</div>
+        <h1>Balap santai.<br><em>Menang serius.</em></h1>
+        <p class="intro">Tiga lap, satu lintasan liar, dan kejutan di setiap tikungan. Ajak sampai 7 teman atau gas sendiri.</p>
+        <label class="input-label" for="nameInput">NAMA PEMBALAP</label>
+        <input id="nameInput" class="field" maxlength="16" autocomplete="nickname" placeholder="Nama kamu" value="Pembalap">
+        <div class="home-actions"><button id="createBtn" class="btn btn-primary">Buat ruang <span>↗</span></button><button id="soloBtn" class="btn btn-secondary">Main sendiri <span>→</span></button></div>
+        <div class="join-row"><input id="codeInput" class="field code-field" maxlength="5" autocomplete="off" autocapitalize="characters" placeholder="KODE RUANG" aria-label="Kode ruang"><button id="joinBtn" class="btn btn-join">Gabung <span>→</span></button></div>
+        <div class="home-foot"><span>01 / 03</span><span>BUKA DI PONSEL ATAU DESKTOP</span></div>
+      </section>
+
+      <section id="lobbyPanel" class="panel lobby-panel hidden">
+        <div class="eyebrow"><span class="eyebrow-line"></span> GARASI PEMBALAP</div>
+        <h2>Siap di garis start?</h2>
+        <p class="panel-copy">Bagikan kode ini ke teman. Host bisa memulai balapan kapan saja.</p>
+        <div class="room-code-wrap"><div><span class="micro-label">KODE RUANG</span><strong id="roomCode">—</strong></div><button id="copyBtn" class="copy-button">Salin undangan ↗</button></div>
+        <div class="roster-heading"><span>PEMBALAP</span><span id="playerCount">0 / 8</span></div>
+        <div id="roster" class="roster"></div>
+        <button id="startBtn" class="btn btn-primary full">Mulai balapan <span>→</span></button>
+        <p id="waitingText" class="waiting hidden">Menunggu host memulai balapan…</p>
+      </section>
+
+      <div id="countdown" class="countdown hidden"><span>BERSIAP</span><strong id="countdownNumber">3</strong><small>3 LAP UNTUK JADI JUARA</small></div>
+
+      <div id="raceHud" class="race-hud hidden">
+        <div class="hud-left"><span class="hud-label">LAP</span><strong id="lapValue">1<span>/3</span></strong><div class="hud-sep"></div><span class="hud-label">POSISI</span><strong id="positionValue">1<span>/1</span></strong></div>
+        <div class="hud-right"><div class="speed"><strong id="speedValue">0</strong><span>KM/J</span></div><button id="itemButton" class="item-button" disabled><span id="itemIcon">◇</span><small id="itemLabel">ITEM</small></button></div>
+        <div id="spectateBanner" class="spectate-banner hidden">FINIS! <span id="spectateName">Menonton pembalap lain</span></div>
+      </div>
+
+      <section id="resultPanel" class="panel result-panel hidden">
+        <div class="eyebrow"><span class="eyebrow-line"></span> HASIL BALAPAN</div>
+        <h2>Garis finis.</h2>
+        <p class="panel-copy">Tiga lap selesai. Siapa yang naik podium?</p>
+        <div id="results" class="results"></div>
+        <button id="rematchBtn" class="btn btn-primary full">Balap lagi <span>→</span></button>
+        <p id="rematchWaiting" class="waiting hidden">Menunggu host memulai balapan lagi…</p>
+      </section>
+
+      <div id="touchControls" class="touch-controls hidden" aria-label="Kontrol sentuh">
+        <div class="touch-steer"><button class="control" data-control="left" aria-label="Belok kiri">◀</button><button class="control" data-control="right" aria-label="Belok kanan">▶</button></div>
+        <div class="touch-drive"><button class="control brake" data-control="brake" aria-label="Rem">REM</button><button class="control gas" data-control="throttle" aria-label="Gas">GAS</button></div>
+      </div>
+      <div id="toast" class="toast hidden" role="status"></div>
+      <div class="stage-corner">KF / CIRCUIT 01 <span>★</span> THE PLAYGROUND</div>
+    </main>
+    <footer class="footer"><span>← → belok · ↑ gas · ↓ rem · <kbd>SPASI</kbd> pakai item · <kbd>SHIFT</kbd> drift</span><span>3 LAP · 8 PEMBALAP · 1 JUARA</span></footer>
+  </div>
+  <script src="/track.js"></script>
+  <script src="/game.js"></script>
+</body>
+</html>

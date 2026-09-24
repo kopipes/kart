@@ -1,0 +1,11 @@
+{
+  "name": "kart-friends",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Original browser kart racing game for up to eight friends",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test"
+  },
+  "engines": { "node": ">=20" }
+}
