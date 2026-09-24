@@ -5,6 +5,7 @@
 .leaderboard{position:absolute;z-index:3;top:108px;left:22px;width:268px;padding:10px;background:#0c2826e8;border:1px solid #7897849c;border-radius:13px;box-shadow:0 8px 26px #10251e5c;pointer-events:none}
 .leaderboard-heading{display:flex;justify-content:space-between;align-items:center;gap:8px;margin:0 3px 8px;color:#f6d677;font-size:9px;letter-spacing:1.2px}
 .leaderboard-heading span{color:#a9c3b4;font-size:8px;white-space:nowrap}
+.leaderboard-heading time{margin-left:4px;color:#e9f1df;font-size:9px;letter-spacing:0;font-variant-numeric:tabular-nums}
 .leaderboard-rows{display:grid;gap:4px}
 .leaderboard-row{display:grid;grid-template-columns:20px 9px minmax(0,1fr) 32px 37px;align-items:center;gap:5px;min-height:28px;padding:4px 6px;background:#1a3c35d9;border:1px solid transparent;border-radius:6px;font-size:10px;font-weight:800;font-variant-numeric:tabular-nums}
 .leaderboard-row.is-you{background:#385837f0;border-color:#f5c84b}

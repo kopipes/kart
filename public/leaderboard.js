@@ -1,6 +1,6 @@
 export function rankRacers(players, trackCount) {
   return [...players].sort((a, b) => {
-    if (a.finishedAt != null && b.finishedAt != null) return a.finishedAt - b.finishedAt;
+    if (a.finishedAt != null && b.finishedAt != null) return a.finishedAt - b.finishedAt || a.rank - b.rank;
     if (a.finishedAt != null) return -1;
     if (b.finishedAt != null) return 1;
     return (b.lap * trackCount + b.progress) - (a.lap * trackCount + a.progress);

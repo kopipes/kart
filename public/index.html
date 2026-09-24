@@ -48,14 +48,14 @@
       </div>
 
       <aside id="leaderboard" class="leaderboard hidden" aria-label="Statistik semua pembalap">
-        <div class="leaderboard-heading"><strong>KLASEMEN</strong><span>LAP SELESAI · KM/J</span></div>
+        <div class="leaderboard-heading"><strong>KLASEMEN <time id="raceTime">3:00</time></strong><span>LAP SELESAI · KM/J</span></div>
         <div id="leaderboardRows" class="leaderboard-rows"></div>
       </aside>
 
       <section id="resultPanel" class="panel result-panel hidden">
         <div class="eyebrow"><span class="eyebrow-line"></span> HASIL BALAPAN</div>
-        <h2>Garis finis.</h2>
-        <p class="panel-copy">Tiga lap selesai. Siapa yang naik podium?</p>
+        <h2 id="resultTitle">Garis finis.</h2>
+        <p id="resultCopy" class="panel-copy">Tiga lap selesai. Siapa yang naik podium?</p>
         <div id="results" class="results"></div>
         <button id="rematchBtn" class="btn btn-primary full">Balap lagi <span>→</span></button>
         <p id="rematchWaiting" class="waiting hidden">Menunggu host memulai balapan lagi…</p>

@@ -85,7 +85,7 @@ import { rankRacers, createLeaderboard } from '/leaderboard.js';
       const dot = document.createElement('span'); dot.className = 'racer-swatch'; dot.style.background = p.color;
       const name = document.createElement('span'); name.className = 'result-name'; name.textContent = p.name;
       const time = document.createElement('span'); time.className = 'result-time';
-      time.textContent = p.time == null ? 'DNF' : formatTime(p.time);
+      time.textContent = p.time == null ? `DNF · ${p.lap}/${state.room.laps}` : formatTime(p.time);
       row.append(place, dot, name, time); return row;
     }));
   }
@@ -109,6 +109,10 @@ import { rankRacers, createLeaderboard } from '/leaderboard.js';
       visible('leaderboard', state.room.multiplayer);
       visible('touchControls', touchDevice && !localPlayer()?.finishedAt);
     } else if (phase === 'finished') {
+      $('resultTitle').textContent = state.room.timedOut ? 'Waktu habis.' : 'Garis finis.';
+      $('resultCopy').textContent = state.room.timedOut
+        ? 'Batas 3 menit tercapai. Peringkat dihitung dari lap dan checkpoint; pembalap yang belum finis bertanda DNF.'
+        : 'Tiga lap selesai. Siapa yang naik podium?';
       visible('resultPanel', true); resultRows();
       visible('rematchBtn', state.room.hostId === state.id);
       visible('rematchWaiting', state.room.hostId !== state.id);
@@ -122,6 +126,8 @@ import { rankRacers, createLeaderboard } from '/leaderboard.js';
     $('lapValue').innerHTML = `${Math.min(3, me.lap + 1)}<span>/3</span>`;
     const racers = rankRacers(state.race.players, track.count);
     if (state.room.multiplayer) leaderboard.update(state.room, racers, state.id);
+    const remaining = Math.max(0, Math.ceil(state.room.raceLimit - state.race.elapsed));
+    $('raceTime').textContent = `${Math.floor(remaining / 60)}:${String(remaining % 60).padStart(2, '0')}`;
     $('positionValue').innerHTML = `${racers.findIndex(p => p.id === state.id) + 1}<span>/${racers.length}</span>`;
     $('speedValue').textContent = Math.round(Math.max(0, me.speed) * .8);
     const icon = { boost: '⚡', shield: '⬡', trap: '▲' };

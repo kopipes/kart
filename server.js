@@ -10,6 +10,7 @@ const { stepKart } = require('./physics');
 const PORT = Number(process.env.PORT || 3217);
 const HOST = process.env.HOST || '0.0.0.0';
 const MAX_PLAYERS = 8, TICK = 1 / 60, LAPS = 3, RACE_LIMIT = 180;
+const gateFrames = track.gates.map(index => ({ point: track.points[index], tangent: track.tangent(index) }));
 const COLORS = ['#f7c843', '#ff6868', '#57cbd3', '#a782f3', '#ff9a51', '#8ed66e', '#e684bd', '#79a6ff'];
 const rooms = new Map(), peers = new Set();
 const assets = new Map([
@@ -74,6 +75,26 @@ function positionAtGrid(i) {
   const p = track.points[0], t = track.tangent(0);
   return { x: p.x - t.x * back - t.y * lane, y: p.y - t.y * back + t.x * lane, angle: t.angle };
 }
+function raceProgress(p) {
+  const index = p.trackIndex;
+  const point = track.points[index];
+  const previous = track.points[(index - 1 + track.count) % track.count];
+  const next = track.points[(index + 1) % track.count];
+  const tangent = track.tangent(index);
+  const spacing = (Math.hypot(point.x - previous.x, point.y - previous.y)
+    + Math.hypot(next.x - point.x, next.y - point.y)) / 2;
+  const along = (p.x - point.x) * tangent.x + (p.y - point.y) * tangent.y;
+  const fineIndex = index + Math.max(-.5, Math.min(.5, along / spacing));
+  const previousGate = track.gates[(p.nextGate + 3) % 4];
+  // Karts start behind the line. Until they cross it, their progress is negative.
+  if (p.nextGate === 1 && index >= track.gates[3]) return fineIndex - track.count;
+  if (p.nextGate === 1 && fineIndex < 0) return fineIndex;
+  // A shortcut cannot earn position beyond the next checkpoint it has not passed.
+  const nextGate = p.nextGate === 0 ? track.count : track.gates[p.nextGate];
+  const progress = p.nextGate === 0 && fineIndex < 0 ? fineIndex + track.count : fineIndex;
+  return Math.max(previousGate, Math.min(progress, nextGate - 1e-6));
+}
+function racePosition(p) { return p.lap * track.count + raceProgress(p); }
 function makePlayer(peer, name, color) {
   return { peer, id: peer.id, name: cleanName(name), color, x: 0, y: 0, angle: 0, speed: 0,
     input: { throttle: false, brake: false, left: false, right: false, drift: false },
@@ -82,14 +103,15 @@ function makePlayer(peer, name, color) {
 }
 function roomSnapshot(room) {
   return { type: 'room', code: room.code, phase: room.phase, hostId: room.hostId, round: room.round,
-    startsAt: room.startsAt, elapsed: room.elapsed, laps: LAPS, multiplayer: room.multiplayer,
+    startsAt: room.startsAt, elapsed: room.elapsed, laps: LAPS, raceLimit: RACE_LIMIT,
+    multiplayer: room.multiplayer, timedOut: room.timedOut,
     players: room.players.map(p => ({ id: p.id, name: p.name, color: p.color, lap: p.lap, finishedAt: p.finishedAt, rank: p.rank })),
     results: room.results };
 }
 function stateSnapshot(room) {
   return { type: 'state', phase: room.phase, elapsed: room.elapsed, now: Date.now(),
     players: room.players.map(p => ({ id: p.id, x: Math.round(p.x * 10) / 10, y: Math.round(p.y * 10) / 10,
-      angle: p.angle, speed: Math.round(p.speed), lap: p.lap, progress: p.trackIndex, ack: p.inputSeq,
+      angle: p.angle, speed: Math.round(p.speed), lap: p.lap, progress: raceProgress(p), ack: p.inputSeq,
       item: p.item, boost: room.elapsed < p.boostUntil, shield: room.elapsed < p.shieldUntil,
       stunned: room.elapsed < p.stunUntil, finishedAt: p.finishedAt, rank: p.rank })),
     boxes: room.boxes.map(b => ({ id: b.id, x: b.x, y: b.y, ready: b.readyAt <= room.elapsed })),
@@ -107,7 +129,8 @@ function createRoom(peer, name) {
   if (rooms.size >= 500) return send(peer, { type: 'error', message: 'Server sedang penuh. Coba lagi sebentar.' });
   leave(peer);
   const room = { code: roomCode(), hostId: peer.id, phase: 'lobby', players: [], round: 0, startsAt: null,
-    elapsed: 0, timer: null, countdownTimer: null, boxes: [], traps: [], nextTrapId: 1, results: [], multiplayer: false };
+    elapsed: 0, timer: null, countdownTimer: null, boxes: [], traps: [], nextTrapId: 1,
+    results: [], multiplayer: false, timedOut: false };
   rooms.set(room.code, room); addPlayer(room, peer, name);
 }
 function joinRoom(peer, code, name) {
@@ -136,7 +159,7 @@ function start(room) {
   clearInterval(room.timer); clearTimeout(room.countdownTimer);
   room.round++; room.phase = 'countdown'; room.startsAt = Date.now() + 3000;
   room.multiplayer = room.players.length > 1;
-  room.elapsed = 0; room.results = []; room.traps = []; room.nextTrapId = 1;
+  room.elapsed = 0; room.results = []; room.traps = []; room.nextTrapId = 1; room.timedOut = false;
   room.boxes = track.itemIndices.map((index, id) => ({ id, x: track.points[index].x, y: track.points[index].y, readyAt: 0 }));
   room.players.forEach((p, i) => {
     Object.assign(p, positionAtGrid(i), { speed: 0, lap: 0, nextGate: 1, trackIndex: 0, item: null,
@@ -151,10 +174,16 @@ function start(room) {
     room.timer = setInterval(() => tick(room, TICK), 1000 / 60);
   }, 3000);
 }
-function crossing(from, to, gate) {
-  const distance = (to - from + track.count) % track.count;
-  const towardGate = (gate - from + track.count) % track.count;
-  return distance > 0 && distance <= 9 && towardGate > 0 && towardGate <= distance;
+function gateCrossing(fromX, fromY, toX, toY, gateIndex) {
+  const { point, tangent } = gateFrames[gateIndex];
+  const before = (fromX - point.x) * tangent.x + (fromY - point.y) * tangent.y;
+  const after = (toX - point.x) * tangent.x + (toY - point.y) * tangent.y;
+  if (before > 0 || after <= 0) return null;
+  const fraction = -before / (after - before);
+  const crossX = fromX + (toX - fromX) * fraction - point.x;
+  const crossY = fromY + (toY - fromY) * fraction - point.y;
+  const lateral = -crossX * tangent.y + crossY * tangent.x;
+  return Math.abs(lateral) <= track.ROAD_HALF - 6 ? fraction : null;
 }
 function useItem(room, p) {
   if (room.phase !== 'playing' || p.finishedAt !== null || !p.item || room.elapsed - p.lastItemAt < .25) return;
@@ -168,18 +197,24 @@ function useItem(room, p) {
 }
 function tick(room, dt) {
   if (room.phase !== 'playing') return;
+  const remaining = RACE_LIMIT - room.elapsed;
+  if (remaining <= 0) return finish(room);
+  dt = Math.min(dt, remaining);
   room.elapsed += dt;
+  let newFinisher = false;
   for (const p of room.players) {
     if (p.finishedAt !== null) continue;
-    const before = p.trackIndex;
+    const beforeX = p.x, beforeY = p.y;
     stepKart(p, p.input, dt, { boost: room.elapsed < p.boostUntil, stunned: room.elapsed < p.stunUntil });
     const near = track.nearest(p.x, p.y);
     p.trackIndex = near.index;
-    if (near.distance < track.ROAD_HALF - 6 && crossing(before, near.index, track.gates[p.nextGate])) {
+    const gateFraction = gateCrossing(beforeX, beforeY, p.x, p.y, p.nextGate);
+    if (gateFraction !== null) {
       if (p.nextGate === 0) {
         p.lap++;
         if (p.lap >= LAPS) {
-          p.finishedAt = room.elapsed; p.rank = room.players.filter(q => q.finishedAt !== null).length;
+          p.finishedAt = room.elapsed - dt + gateFraction * dt;
+          newFinisher = true;
           p.speed = 0; p.input = { throttle: false, brake: false, left: false, right: false, drift: false };
         }
       }
@@ -191,6 +226,11 @@ function tick(room, dt) {
       box.readyAt = room.elapsed + 8;
       break;
     }
+  }
+  if (newFinisher) {
+    room.players.filter(p => p.finishedAt !== null)
+      .sort((a, b) => a.finishedAt - b.finishedAt)
+      .forEach((p, index) => { p.rank = index + 1; });
   }
   room.traps = room.traps.filter(t => t.expiresAt > room.elapsed);
   for (const t of [...room.traps]) for (const p of room.players) {
@@ -207,11 +247,12 @@ function tick(room, dt) {
 function finish(room) {
   if (room.phase !== 'playing') return;
   room.phase = 'finished'; clearInterval(room.timer); room.timer = null;
+  room.timedOut = room.elapsed >= RACE_LIMIT && room.players.some(p => p.finishedAt === null);
   const ranked = [...room.players].sort((a, b) => {
-    if (a.finishedAt !== null && b.finishedAt !== null) return a.finishedAt - b.finishedAt;
+    if (a.finishedAt !== null && b.finishedAt !== null) return a.finishedAt - b.finishedAt || a.rank - b.rank;
     if (a.finishedAt !== null) return -1;
     if (b.finishedAt !== null) return 1;
-    return (b.lap * track.count + b.trackIndex) - (a.lap * track.count + a.trackIndex);
+    return racePosition(b) - racePosition(a);
   });
   room.results = ranked.map((p, i) => ({ id: p.id, name: p.name, color: p.color, place: i + 1,
     time: p.finishedAt, lap: p.lap }));
@@ -290,4 +331,4 @@ const heartbeat = setInterval(() => {
 }, 25000);
 heartbeat.unref();
 if (require.main === module) server.listen(PORT, HOST, () => console.log(`Kart Friends ready at http://${HOST}:${PORT}`));
-module.exports = { server, rooms, peers, tick, start, finish, crossing, positionAtGrid, handleMessage };
+module.exports = { server, rooms, peers, tick, start, finish, gateCrossing, raceProgress, positionAtGrid, handleMessage };
