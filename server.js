@@ -98,7 +98,7 @@ function racePosition(p) { return p.lap * track.count + raceProgress(p); }
 function makePlayer(peer, name, color) {
   return { peer, id: peer.id, name: cleanName(name), color, x: 0, y: 0, angle: 0, speed: 0,
     input: { throttle: false, brake: false, left: false, right: false, drift: false },
-    lap: 0, nextGate: 1, checkpointTimes: [], trackIndex: 0, item: null, boostUntil: 0, shieldUntil: 0, stunUntil: 0,
+    lap: 0, nextGate: 1, missedCheckpoint: null, checkpointTimes: [], trackIndex: 0, item: null, boostUntil: 0, shieldUntil: 0, stunUntil: 0,
     finishedAt: null, rank: null, offroad: false, lastItemAt: 0, inputSeq: 0 };
 }
 function roomSnapshot(room) {
@@ -111,7 +111,8 @@ function roomSnapshot(room) {
 function stateSnapshot(room) {
   return { type: 'state', phase: room.phase, elapsed: room.elapsed, now: Date.now(),
     players: room.players.map(p => ({ id: p.id, x: Math.round(p.x * 10) / 10, y: Math.round(p.y * 10) / 10,
-      angle: p.angle, speed: Math.round(p.speed), lap: p.lap, progress: raceProgress(p), ack: p.inputSeq,
+      angle: p.angle, speed: Math.round(p.speed), lap: p.lap, progress: raceProgress(p),
+      missedCheckpoint: p.missedCheckpoint, ack: p.inputSeq,
       item: p.item, boost: room.elapsed < p.boostUntil, shield: room.elapsed < p.shieldUntil,
       stunned: room.elapsed < p.stunUntil, finishedAt: p.finishedAt, rank: p.rank })),
     boxes: room.boxes.map(b => ({ id: b.id, x: b.x, y: b.y, ready: b.readyAt <= room.elapsed })),
@@ -162,7 +163,8 @@ function start(room) {
   room.elapsed = 0; room.results = []; room.traps = []; room.nextTrapId = 1; room.timedOut = false;
   room.boxes = track.itemIndices.map((index, id) => ({ id, x: track.points[index].x, y: track.points[index].y, readyAt: 0 }));
   room.players.forEach((p, i) => {
-    Object.assign(p, positionAtGrid(i), { speed: 0, lap: 0, nextGate: 1, checkpointTimes: [], trackIndex: 0, item: null,
+    Object.assign(p, positionAtGrid(i), { speed: 0, lap: 0, nextGate: 1, missedCheckpoint: null,
+      checkpointTimes: [], trackIndex: 0, item: null,
       boostUntil: 0, shieldUntil: 0, stunUntil: 0, finishedAt: null, rank: null, offroad: false, lastItemAt: 0, inputSeq: 0 });
     p.input = { throttle: false, brake: false, left: false, right: false, drift: false };
   });
@@ -183,7 +185,14 @@ function gateCrossing(fromX, fromY, toX, toY, gateIndex) {
   const crossX = fromX + (toX - fromX) * fraction - point.x;
   const crossY = fromY + (toY - fromY) * fraction - point.y;
   const lateral = -crossX * tangent.y + crossY * tangent.x;
-  return Math.abs(lateral) <= track.ROAD_HALF - 6 ? fraction : null;
+  // A kart whose centre is close to the road edge still counts as crossing.
+  return Math.abs(lateral) <= track.ROAD_HALF + 6 ? fraction : null;
+}
+function passedUncreditedGate(p) {
+  const index = p.trackIndex;
+  if (p.nextGate === 0) return index > 12 && index < track.gates[1];
+  const gate = track.gates[p.nextGate];
+  return index > gate + 12 && index < (p.nextGate === 3 ? track.count : track.gates[p.nextGate + 1]);
 }
 function useItem(room, p) {
   if (room.phase !== 'playing' || p.finishedAt !== null || !p.item || room.elapsed - p.lastItemAt < .25) return;
@@ -210,6 +219,7 @@ function tick(room, dt) {
     p.trackIndex = near.index;
     const gateFraction = gateCrossing(beforeX, beforeY, p.x, p.y, p.nextGate);
     if (gateFraction !== null) {
+      p.missedCheckpoint = null;
       const crossingTime = room.elapsed - dt + gateFraction * dt;
       p.checkpointTimes.push({ gate: p.nextGate, time: Number(crossingTime.toFixed(3)) });
       if (p.nextGate === 0) {
@@ -224,6 +234,10 @@ function tick(room, dt) {
         }
       }
       p.nextGate = (p.nextGate + 1) % 4;
+    } else if (p.missedCheckpoint === null && passedUncreditedGate(p)) {
+      p.missedCheckpoint = p.nextGate;
+      if (server.listening) console.info(JSON.stringify({ event: 'checkpoint_missed', room: room.code,
+        round: room.round, player: p.id, gate: p.nextGate, elapsed: Number(room.elapsed.toFixed(3)) }));
     }
     if (!p.item) for (const box of room.boxes) {
       if (box.readyAt > room.elapsed || Math.hypot(p.x - box.x, p.y - box.y) > 30) continue;

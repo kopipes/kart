@@ -28,7 +28,29 @@ test('checkpoint crossing requires physically passing the line in the right dire
   assert.equal(gateCrossing(before.x, before.y, short.x, short.y, 0), null);
   const outsideBefore = atGate(0, -5, track.ROAD_HALF + 5);
   const outsideAfter = atGate(0, 5, track.ROAD_HALF + 5);
-  assert.equal(gateCrossing(outsideBefore.x, outsideBefore.y, outsideAfter.x, outsideAfter.y, 0), null);
+  assert.notEqual(gateCrossing(outsideBefore.x, outsideBefore.y, outsideAfter.x, outsideAfter.y, 0), null);
+  const farBefore = atGate(0, -5, track.ROAD_HALF + 7);
+  const farAfter = atGate(0, 5, track.ROAD_HALF + 7);
+  assert.equal(gateCrossing(farBefore.x, farBefore.y, farAfter.x, farAfter.y, 0), null);
+});
+
+test('a missed checkpoint is reported and clears after crossing it', () => {
+  cleanup();
+  const a = peer(); act(a, { type: 'create', name: 'A' });
+  const room = a.room; act(a, { type: 'start' });
+  clearTimeout(room.countdownTimer); room.phase = 'playing';
+  const racer = room.players[0];
+  Object.assign(racer, track.points[track.gates[1] + 15]);
+  tick(room, 1 / 60);
+  assert.equal(racer.nextGate, 1);
+  assert.equal(racer.missedCheckpoint, 1);
+  assert.equal(racer.lap, 0);
+  Object.assign(racer, atGate(1, -2, track.ROAD_HALF + 5));
+  racer.speed = 315; racer.input.throttle = true;
+  tick(room, 1 / 60);
+  assert.equal(racer.nextGate, 2);
+  assert.equal(racer.missedCheckpoint, null);
+  cleanup();
 });
 
 test('position follows the start line and the last validated checkpoint', () => {
@@ -137,6 +159,31 @@ test('same-tick finishes are ordered by the actual line crossing time', () => {
   assert.equal(second.rank, 1);
   assert.equal(first.rank, 2);
   assert.deepEqual(room.results.map(p => p.name), ['B', 'A']);
+  cleanup();
+});
+
+test('a racer behind on the same lap cannot finish before the racer ahead', () => {
+  cleanup();
+  const a = peer(), b = peer();
+  act(a, { type: 'create', name: 'Bob' });
+  const room = a.room;
+  act(b, { type: 'join', code: room.code, name: 'Rayvan' });
+  act(a, { type: 'start' });
+  clearTimeout(room.countdownTimer); room.phase = 'playing';
+  const [bob, rayvan] = room.players;
+  Object.assign(bob, atGate(0, -2));
+  Object.assign(rayvan, atGate(0, -20));
+  for (const racer of [bob, rayvan]) {
+    racer.lap = 2; racer.nextGate = 0; racer.speed = 315; racer.input.throttle = true;
+  }
+  tick(room, 1 / 60);
+  assert.equal(bob.rank, 1);
+  assert.notEqual(bob.finishedAt, null);
+  assert.equal(rayvan.finishedAt, null);
+  assert.equal(room.phase, 'playing');
+  for (let i = 0; i < 5; i++) tick(room, 1 / 60);
+  assert.equal(rayvan.rank, 2);
+  assert.deepEqual(room.results.map(p => p.name), ['Bob', 'Rayvan']);
   cleanup();
 });
 

@@ -127,6 +127,9 @@ import { rankRacers, createLeaderboard } from '/leaderboard.js';
   function updateHud() {
     if (state.room?.phase !== 'playing') return;
     const me = localPlayer(); if (!me) return;
+    $('checkpointWarning').textContent = me.missedCheckpoint == null ? ''
+      : `${me.missedCheckpoint === 0 ? 'Garis finis' : `Checkpoint ${me.missedCheckpoint}`} terlewat — putar balik!`;
+    visible('checkpointWarning', me.missedCheckpoint != null && me.finishedAt == null);
     $('lapValue').innerHTML = `${Math.min(3, me.lap + 1)}<span>/3</span>`;
     const racers = rankRacers(state.race.players, track.count);
     if (state.room.multiplayer) leaderboard.update(state.room, racers, state.id);

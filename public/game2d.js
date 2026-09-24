@@ -123,6 +123,9 @@ import { rankRacers, createLeaderboard } from '/leaderboard.js';
   function updateHud() {
     if (state.room?.phase !== 'playing') return;
     const me = localPlayer(); if (!me) return;
+    $('checkpointWarning').textContent = me.missedCheckpoint == null ? ''
+      : `${me.missedCheckpoint === 0 ? 'Garis finis' : `Checkpoint ${me.missedCheckpoint}`} terlewat — putar balik!`;
+    visible('checkpointWarning', me.missedCheckpoint != null && me.finishedAt == null);
     $('lapValue').innerHTML = `${Math.min(3, me.lap + 1)}<span>/3</span>`;
     const racers = rankRacers(state.race.players, track.count);
     if (state.room.multiplayer) leaderboard.update(state.room, racers, state.id);
@@ -214,15 +217,15 @@ import { rankRacers, createLeaderboard } from '/leaderboard.js';
     }
     const start = track.points[0], dir = track.tangent(0);
     ctx.save(); ctx.translate(start.x, start.y); ctx.rotate(dir.angle);
-    for (let y = -60; y < 60; y += 12) for (let x = -8; x < 8; x += 8) {
-      ctx.fillStyle = (Math.floor((y+60)/12) + Math.floor((x+8)/8)) % 2 ? '#fff7df' : '#26322d';
-      ctx.fillRect(x, y, 8, 12);
+    for (let y = -70; y < 70; y += 10) for (let x = -8; x < 8; x += 8) {
+      ctx.fillStyle = (Math.floor((y+70)/10) + Math.floor((x+8)/8)) % 2 ? '#fff7df' : '#26322d';
+      ctx.fillRect(x, y, 8, 10);
     }
     ctx.restore();
     for (const gate of track.gates.slice(1)) {
       const p = track.points[gate], t = track.tangent(gate);
       ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(t.angle); ctx.strokeStyle = '#f2c74a99'; ctx.lineWidth = 3;
-      ctx.setLineDash([7, 8]); ctx.beginPath(); ctx.moveTo(0, -54); ctx.lineTo(0, 54); ctx.stroke(); ctx.restore(); ctx.setLineDash([]);
+      ctx.setLineDash([7, 8]); ctx.beginPath(); ctx.moveTo(0, -70); ctx.lineTo(0, 70); ctx.stroke(); ctx.restore(); ctx.setLineDash([]);
     }
   }
   function drawBox(box, time) {

@@ -69,7 +69,7 @@ export function createScene(canvas, track) {
   const checkWhite = [], checkDark = [];
   const start = track.points[0], startAngle = track.tangent(0).angle;
   const checkerGeo = new THREE.BoxGeometry(8, .15, 10), checkerDummy = new THREE.Object3D();
-  for (let row = -6; row <= 5; row++) for (let col = 0; col < 2; col++) {
+  for (let row = -7; row <= 6; row++) for (let col = 0; col < 2; col++) {
     const nx = -Math.sin(startAngle), nz = Math.cos(startAngle);
     const hx = Math.cos(startAngle), hz = Math.sin(startAngle);
     const obj = { x: start.x - X0 + nx * (row * 10 + 5) + hx * (col * 8 - 4),
@@ -104,6 +104,14 @@ export function createScene(canvas, track) {
     mesh.instanceMatrix.needsUpdate = true;
     if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
     scene.add(mesh);
+  }
+  const checkpointMat = new THREE.MeshBasicMaterial({ color: '#f2c74a', transparent: true, opacity: .7 });
+  for (const gate of track.gates.slice(1)) {
+    const point = track.points[gate], tangent = track.tangent(gate);
+    const marker = new THREE.Mesh(new THREE.BoxGeometry(3, .18, 140), checkpointMat);
+    marker.position.set(point.x - X0, .06, point.y - Z0);
+    marker.rotation.y = -tangent.angle;
+    scene.add(marker);
   }
   instancedNature(trees, new THREE.ConeGeometry(1, 1, 6), -1.1, '#fff', t => ({ x: t.size, y: t.size * 2.2, z: t.size }));
   instancedNature(rocks, new THREE.IcosahedronGeometry(1, 0), -1, '#c8d4b3', t => ({ x: t.size*.65, y: t.size*.35, z: t.size*.7 }));
