@@ -74,7 +74,8 @@ test('server moves a kart from input and resolves a shielded trap hit', () => {
   clearTimeout(room.countdownTimer); room.phase = 'playing';
   const kart = room.players[0], rival = room.players[1];
   const initialX = kart.x;
-  act(a, { type: 'input', throttle: true, left: false, right: false, brake: false, drift: false });
+  act(a, { type: 'input', seq: 7, throttle: true, left: false, right: false, brake: false, drift: false });
+  assert.equal(kart.inputSeq, 7);
   for (let i = 0; i < 40; i++) tick(room, 1 / 60);
   assert.ok(kart.x > initialX + 20);
   assert.ok(kart.speed > 100);

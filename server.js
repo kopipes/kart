@@ -1,9 +1,11 @@
-// Kart Friends: dependency-free, authoritative multiplayer server.
+// Kart Friends: authoritative multiplayer server, using Node built-ins for HTTP/WebSocket.
 const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
+const zlib = require('node:zlib');
 const track = require('./track');
+const { stepKart } = require('./physics');
 
 const PORT = Number(process.env.PORT || 3217);
 const HOST = process.env.HOST || '0.0.0.0';
@@ -15,18 +17,33 @@ const assets = new Map([
   ['/index.html', ['public/index.html', 'text/html; charset=utf-8']],
   ['/style.css', ['public/style.css', 'text/css; charset=utf-8']],
   ['/game.js', ['public/game.js', 'text/javascript; charset=utf-8']],
-  ['/track.js', ['track.js', 'text/javascript; charset=utf-8']]
+  ['/game2d.js', ['public/game2d.js', 'text/javascript; charset=utf-8']],
+  ['/game3d.js', ['public/game3d.js', 'text/javascript; charset=utf-8']],
+  ['/scene3d.js', ['public/scene3d.js', 'text/javascript; charset=utf-8']],
+  ['/track.js', ['track.js', 'text/javascript; charset=utf-8']],
+  ['/physics.js', ['physics.js', 'text/javascript; charset=utf-8']],
+  ['/vendor/three.module.min.js', ['node_modules/three/build/three.module.min.js', 'text/javascript; charset=utf-8']],
+  ['/vendor/three.core.min.js', ['node_modules/three/build/three.core.min.js', 'text/javascript; charset=utf-8']]
 ]);
+const assetBodies = new Map(Array.from(assets, ([url, [file, contentType]]) => {
+  const body = fs.readFileSync(path.join(__dirname, file));
+  return [url, { contentType, body, br: body.length > 1024 ? zlib.brotliCompressSync(body, {
+    params: { [zlib.constants.BROTLI_PARAM_QUALITY]: 5 }
+  }) : null }];
+}));
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, 'http://localhost');
   if (url.pathname === '/health') {
     res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
     return res.end(JSON.stringify({ ok: true, rooms: rooms.size }));
   }
-  const asset = assets.get(url.pathname);
+  const asset = assetBodies.get(url.pathname);
   if (!asset || req.method !== 'GET') { res.writeHead(404); return res.end('Not found'); }
-  res.writeHead(200, { 'content-type': asset[1], 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' });
-  fs.createReadStream(path.join(__dirname, asset[0])).pipe(res);
+  const compressed = asset.br && /(?:^|,)\s*br\s*(?:[,;]|$)/i.test(req.headers['accept-encoding'] || '');
+  res.writeHead(200, { 'content-type': asset.contentType, 'cache-control': 'no-store',
+    'x-content-type-options': 'nosniff', 'vary': 'Accept-Encoding',
+    ...(compressed ? { 'content-encoding': 'br' } : {}) });
+  res.end(compressed ? asset.br : asset.body);
 });
 
 function frame(payload, opcode = 1) {
@@ -60,7 +77,7 @@ function makePlayer(peer, name, color) {
   return { peer, id: peer.id, name: cleanName(name), color, x: 0, y: 0, angle: 0, speed: 0,
     input: { throttle: false, brake: false, left: false, right: false, drift: false },
     lap: 0, nextGate: 1, trackIndex: 0, item: null, boostUntil: 0, shieldUntil: 0, stunUntil: 0,
-    finishedAt: null, rank: null, offroad: false, lastItemAt: 0 };
+    finishedAt: null, rank: null, offroad: false, lastItemAt: 0, inputSeq: 0 };
 }
 function roomSnapshot(room) {
   return { type: 'room', code: room.code, phase: room.phase, hostId: room.hostId, round: room.round,
@@ -71,7 +88,7 @@ function roomSnapshot(room) {
 function stateSnapshot(room) {
   return { type: 'state', phase: room.phase, elapsed: room.elapsed, now: Date.now(),
     players: room.players.map(p => ({ id: p.id, x: Math.round(p.x * 10) / 10, y: Math.round(p.y * 10) / 10,
-      angle: p.angle, speed: Math.round(p.speed), lap: p.lap, progress: p.trackIndex,
+      angle: p.angle, speed: Math.round(p.speed), lap: p.lap, progress: p.trackIndex, ack: p.inputSeq,
       item: p.item, boost: room.elapsed < p.boostUntil, shield: room.elapsed < p.shieldUntil,
       stunned: room.elapsed < p.stunUntil, finishedAt: p.finishedAt, rank: p.rank })),
     boxes: room.boxes.map(b => ({ id: b.id, x: b.x, y: b.y, ready: b.readyAt <= room.elapsed })),
@@ -121,7 +138,7 @@ function start(room) {
   room.boxes = track.itemIndices.map((index, id) => ({ id, x: track.points[index].x, y: track.points[index].y, readyAt: 0 }));
   room.players.forEach((p, i) => {
     Object.assign(p, positionAtGrid(i), { speed: 0, lap: 0, nextGate: 1, trackIndex: 0, item: null,
-      boostUntil: 0, shieldUntil: 0, stunUntil: 0, finishedAt: null, rank: null, offroad: false, lastItemAt: 0 });
+      boostUntil: 0, shieldUntil: 0, stunUntil: 0, finishedAt: null, rank: null, offroad: false, lastItemAt: 0, inputSeq: 0 });
     p.input = { throttle: false, brake: false, left: false, right: false, drift: false };
   });
   broadcast(room, roomSnapshot(room)); broadcast(room, stateSnapshot(room));
@@ -152,26 +169,8 @@ function tick(room, dt) {
   room.elapsed += dt;
   for (const p of room.players) {
     if (p.finishedAt !== null) continue;
-    const input = p.input, stunned = room.elapsed < p.stunUntil;
     const before = p.trackIndex;
-    const nearBefore = track.nearest(p.x, p.y);
-    const offroad = nearBefore.distance > track.ROAD_HALF - 10;
-    p.offroad = offroad;
-    const boost = room.elapsed < p.boostUntil;
-    const maxSpeed = stunned ? 72 : offroad ? 130 : boost ? 440 : 315;
-    if (input.throttle && !stunned) p.speed += (boost ? 420 : 290) * dt;
-    else if (input.brake) p.speed -= 330 * dt;
-    else p.speed *= Math.pow(.985, dt * 60);
-    if (input.brake && p.speed > 0) p.speed -= 180 * dt;
-    p.speed = Math.max(-95, Math.min(maxSpeed, p.speed));
-    if (offroad && p.speed > maxSpeed) p.speed = Math.max(maxSpeed, p.speed - 350 * dt);
-    if (stunned) p.speed *= Math.pow(.95, dt * 60);
-    const steer = Number(input.right) - Number(input.left);
-    const steeringGrip = Math.min(1, Math.abs(p.speed) / 95);
-    p.angle += steer * (input.drift ? 3.85 : 2.9) * steeringGrip * Math.sign(p.speed || 1) * dt;
-    if (input.drift) p.speed *= Math.pow(.994, dt * 60);
-    p.x = Math.max(15, Math.min(track.WIDTH - 15, p.x + Math.cos(p.angle) * p.speed * dt));
-    p.y = Math.max(15, Math.min(track.HEIGHT - 15, p.y + Math.sin(p.angle) * p.speed * dt));
+    stepKart(p, p.input, dt, { boost: room.elapsed < p.boostUntil, stunned: room.elapsed < p.stunUntil });
     const near = track.nearest(p.x, p.y);
     p.trackIndex = near.index;
     if (near.distance < track.ROAD_HALF - 6 && crossing(before, near.index, track.gates[p.nextGate])) {
@@ -231,7 +230,10 @@ function handleMessage(peer, raw) {
   else if (msg.type === 'start' && peer.room?.hostId === peer.id) start(peer.room);
   else if (msg.type === 'input' && peer.room?.phase === 'playing') {
     const p = peer.room.players.find(x => x.peer === peer);
-    if (p && p.finishedAt === null) for (const key of ['throttle', 'brake', 'left', 'right', 'drift']) p.input[key] = msg[key] === true;
+    if (p && p.finishedAt === null) {
+      for (const key of ['throttle', 'brake', 'left', 'right', 'drift']) p.input[key] = msg[key] === true;
+      if (Number.isSafeInteger(msg.seq) && msg.seq >= 0 && msg.seq < 1_000_000_000) p.inputSeq = msg.seq;
+    }
   } else if (msg.type === 'use' && peer.room?.phase === 'playing') {
     const p = peer.room.players.find(x => x.peer === peer);
     if (p) useItem(peer.room, p);

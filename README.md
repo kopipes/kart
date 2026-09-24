@@ -1,12 +1,13 @@
 # Kart Friends
 
-Game balap kart arcade orisinal di browser. Buat ruang dan bagikan kode 5 karakter untuk bermain dengan maksimal 8 orang, atau mulai sendiri. Host memulai balapan; setiap ronde terdiri dari 3 lap. Pembalap yang finis tetap dapat menonton sampai hasil akhir, lalu host dapat mengulang balapan dalam ruang yang sama.
+Game balap kart arcade orisinal di browser dengan kamera 3D di belakang kart. Buat ruang dan bagikan kode 5 karakter untuk bermain dengan maksimal 8 orang, atau mulai sendiri. Host memulai balapan; setiap ronde terdiri dari 3 lap. Pembalap yang finis tetap dapat menonton sampai hasil akhir, lalu host dapat mengulang balapan dalam ruang yang sama.
 
 ## Jalankan
 
-Butuh Node.js 20+. Tidak ada dependensi npm atau proses build.
+Butuh Node.js 20+. Three.js dipasang secara lokal; game tidak memuat library dari CDN dan tidak membutuhkan proses build.
 
 ```sh
+npm ci
 npm start
 ```
 
@@ -27,10 +28,11 @@ Item diambil dengan melewati kotak pada lintasan. Setiap pembalap menyimpan satu
 ## Desain teknis
 
 - Satu proses Node menyimpan ruang sementara di memori. Ruang hilang saat server berhenti; pemain yang putus kehilangan tempatnya.
-- Server berjalan pada 60 tick/detik dan mengirim snapshot sekitar 20 kali/detik. Browser hanya mengirim tombol yang ditekan, lalu menghaluskan posisi untuk tampilan.
+- Server berjalan pada 60 tick/detik dan mengirim snapshot sekitar 20 kali/detik. Browser mengirim input 60 kali/detik, langsung memprediksi gerak kart sendiri memakai rumus fisika yang sama, kemudian mengoreksi terhadap snapshot server. Kart lain diinterpolasi agar terlihat halus.
 - Checkpoint harus dilewati berurutan sebelum garis start menambah lap. Hasil dihitung oleh server dari waktu finis; setelah 180 detik, pembalap yang belum finis dicatat DNF.
 - Kode ruang dibuat secara acak, nama dibatasi 16 karakter, ruang dibatasi 8 pembalap, dan hanya host yang dapat memulai ronde.
-- Aset visual digambar langsung dengan Canvas dan CSS. Tidak ada CDN, gambar, atau library pihak ketiga.
+- Lintasan, kart, pepohonan, dan item 3D dibangun dari geometri kode; Three.js disajikan oleh server sendiri. Browser tanpa WebGL2 memakai tampilan Canvas 2D sebagai cadangan.
+- Renderer 3D membatasi resolusi piksel, menyesuaikannya berdasarkan waktu frame, memakai instancing untuk objek berulang, dan tidak memakai efek pascaproses berat. Angka FPS, draw call, jumlah segitiga, dan rasio piksel tersedia di `data-*` pada elemen canvas untuk pengujian.
 
 ## Uji
 
