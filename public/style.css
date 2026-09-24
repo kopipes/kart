@@ -16,4 +16,5 @@
 .leaderboard-lap{color:#f9e4a0}
 .leaderboard-speed{color:#abc9b6;font-size:9px}
 .leaderboard-row.is-finished .leaderboard-speed{color:#f5d678}
+.leaderboard-gap{margin:0 3px 8px;padding:5px 7px;border-radius:5px;background:#755d2e;color:#fff1be;font-size:10px;font-weight:900}
 @media (max-width:700px){.leaderboard{top:94px;left:9px;width:min(248px,calc(100% - 18px));padding:7px}.leaderboard-heading{margin-bottom:5px}.leaderboard-rows{gap:2px}.leaderboard-row{min-height:26px;padding:3px 5px;font-size:9px}}

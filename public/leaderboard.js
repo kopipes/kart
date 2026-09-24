@@ -9,6 +9,7 @@ export function rankRacers(players, trackCount) {
 
 export function createLeaderboard(container) {
   const list = container.querySelector('#leaderboardRows');
+  const gap = container.querySelector('#leaderboardGap');
   const rows = new Map();
   const setText = (element, value) => {
     if (element.textContent !== value) element.textContent = value;
@@ -34,6 +35,12 @@ export function createLeaderboard(container) {
   return {
     update(room, racers, localId) {
       const metadata = new Map(room.players.map(player => [player.id, player]));
+      const me = racers.find(player => player.id === localId);
+      const lapLeader = me && me.finishedAt == null && racers.find(player => player.id !== localId && player.lap > me.lap);
+      const lapGap = lapLeader ? lapLeader.lap - me.lap : 0;
+      const gapText = lapGap ? `${metadata.get(lapLeader.id)?.name || 'Pembalap lain'} unggul ${lapGap} putaran` : '';
+      setText(gap, gapText);
+      gap.classList.toggle('hidden', !lapGap);
       const active = new Set(racers.map(player => player.id));
       for (const [id, row] of rows) {
         if (active.has(id)) continue;

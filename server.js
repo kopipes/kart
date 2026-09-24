@@ -98,7 +98,7 @@ function racePosition(p) { return p.lap * track.count + raceProgress(p); }
 function makePlayer(peer, name, color) {
   return { peer, id: peer.id, name: cleanName(name), color, x: 0, y: 0, angle: 0, speed: 0,
     input: { throttle: false, brake: false, left: false, right: false, drift: false },
-    lap: 0, nextGate: 1, trackIndex: 0, item: null, boostUntil: 0, shieldUntil: 0, stunUntil: 0,
+    lap: 0, nextGate: 1, checkpointTimes: [], trackIndex: 0, item: null, boostUntil: 0, shieldUntil: 0, stunUntil: 0,
     finishedAt: null, rank: null, offroad: false, lastItemAt: 0, inputSeq: 0 };
 }
 function roomSnapshot(room) {
@@ -162,7 +162,7 @@ function start(room) {
   room.elapsed = 0; room.results = []; room.traps = []; room.nextTrapId = 1; room.timedOut = false;
   room.boxes = track.itemIndices.map((index, id) => ({ id, x: track.points[index].x, y: track.points[index].y, readyAt: 0 }));
   room.players.forEach((p, i) => {
-    Object.assign(p, positionAtGrid(i), { speed: 0, lap: 0, nextGate: 1, trackIndex: 0, item: null,
+    Object.assign(p, positionAtGrid(i), { speed: 0, lap: 0, nextGate: 1, checkpointTimes: [], trackIndex: 0, item: null,
       boostUntil: 0, shieldUntil: 0, stunUntil: 0, finishedAt: null, rank: null, offroad: false, lastItemAt: 0, inputSeq: 0 });
     p.input = { throttle: false, brake: false, left: false, right: false, drift: false };
   });
@@ -210,10 +210,15 @@ function tick(room, dt) {
     p.trackIndex = near.index;
     const gateFraction = gateCrossing(beforeX, beforeY, p.x, p.y, p.nextGate);
     if (gateFraction !== null) {
+      const crossingTime = room.elapsed - dt + gateFraction * dt;
+      p.checkpointTimes.push({ gate: p.nextGate, time: Number(crossingTime.toFixed(3)) });
       if (p.nextGate === 0) {
         p.lap++;
+        if (server.listening) console.info(JSON.stringify({ event: 'lap_completed', room: room.code, round: room.round,
+          player: p.id, lap: p.lap, checkpoints: p.checkpointTimes }));
+        p.checkpointTimes = [];
         if (p.lap >= LAPS) {
-          p.finishedAt = room.elapsed - dt + gateFraction * dt;
+          p.finishedAt = crossingTime;
           newFinisher = true;
           p.speed = 0; p.input = { throttle: false, brake: false, left: false, right: false, drift: false };
         }
