@@ -19,6 +19,7 @@ const assets = new Map([
   ['/game.js', ['public/game.js', 'text/javascript; charset=utf-8']],
   ['/game2d.js', ['public/game2d.js', 'text/javascript; charset=utf-8']],
   ['/game3d.js', ['public/game3d.js', 'text/javascript; charset=utf-8']],
+  ['/leaderboard.js', ['public/leaderboard.js', 'text/javascript; charset=utf-8']],
   ['/scene3d.js', ['public/scene3d.js', 'text/javascript; charset=utf-8']],
   ['/track.js', ['track.js', 'text/javascript; charset=utf-8']],
   ['/physics.js', ['physics.js', 'text/javascript; charset=utf-8']],
@@ -81,7 +82,7 @@ function makePlayer(peer, name, color) {
 }
 function roomSnapshot(room) {
   return { type: 'room', code: room.code, phase: room.phase, hostId: room.hostId, round: room.round,
-    startsAt: room.startsAt, elapsed: room.elapsed, laps: LAPS,
+    startsAt: room.startsAt, elapsed: room.elapsed, laps: LAPS, multiplayer: room.multiplayer,
     players: room.players.map(p => ({ id: p.id, name: p.name, color: p.color, lap: p.lap, finishedAt: p.finishedAt, rank: p.rank })),
     results: room.results };
 }
@@ -106,7 +107,7 @@ function createRoom(peer, name) {
   if (rooms.size >= 500) return send(peer, { type: 'error', message: 'Server sedang penuh. Coba lagi sebentar.' });
   leave(peer);
   const room = { code: roomCode(), hostId: peer.id, phase: 'lobby', players: [], round: 0, startsAt: null,
-    elapsed: 0, timer: null, countdownTimer: null, boxes: [], traps: [], nextTrapId: 1, results: [] };
+    elapsed: 0, timer: null, countdownTimer: null, boxes: [], traps: [], nextTrapId: 1, results: [], multiplayer: false };
   rooms.set(room.code, room); addPlayer(room, peer, name);
 }
 function joinRoom(peer, code, name) {
@@ -134,6 +135,7 @@ function start(room) {
   if (!['lobby', 'finished'].includes(room.phase)) return;
   clearInterval(room.timer); clearTimeout(room.countdownTimer);
   room.round++; room.phase = 'countdown'; room.startsAt = Date.now() + 3000;
+  room.multiplayer = room.players.length > 1;
   room.elapsed = 0; room.results = []; room.traps = []; room.nextTrapId = 1;
   room.boxes = track.itemIndices.map((index, id) => ({ id, x: track.points[index].x, y: track.points[index].y, readyAt: 0 }));
   room.players.forEach((p, i) => {

@@ -1,10 +1,12 @@
 import { createScene } from '/scene3d.js';
+import { rankRacers, createLeaderboard } from '/leaderboard.js';
 
 (() => {
   'use strict';
   const track = window.KartTrack, physics = window.KartPhysics, $ = id => document.getElementById(id);
   const canvas = $('gameCanvas'), view = createScene(canvas, track);
-  const panels = ['homePanel', 'lobbyPanel', 'resultPanel', 'countdown', 'raceHud', 'touchControls'];
+  const panels = ['homePanel', 'lobbyPanel', 'resultPanel', 'countdown', 'raceHud', 'leaderboard', 'touchControls'];
+  const leaderboard = createLeaderboard($('leaderboard'));
   const controls = { throttle: false, brake: false, left: false, right: false, drift: false };
   const state = { socket: null, id: null, room: null, race: null, prediction: null, samples: new Map(),
     sequence: 0, round: -1, soloPending: false, toastTimer: 0 };
@@ -108,6 +110,7 @@ import { createScene } from '/scene3d.js';
     } else if (phase === 'countdown') visible('countdown', true);
     else if (phase === 'playing') {
       visible('raceHud', true);
+      visible('leaderboard', state.room.multiplayer);
       visible('touchControls', touchDevice && !localPlayer()?.finishedAt);
     } else if (phase === 'finished') {
       visible('resultPanel', true); resultRows();
@@ -121,11 +124,8 @@ import { createScene } from '/scene3d.js';
     if (state.room?.phase !== 'playing') return;
     const me = localPlayer(); if (!me) return;
     $('lapValue').innerHTML = `${Math.min(3, me.lap + 1)}<span>/3</span>`;
-    const racers = [...state.race.players].sort((a, b) => {
-      if (a.finishedAt != null && b.finishedAt != null) return a.finishedAt - b.finishedAt;
-      if (a.finishedAt != null) return -1; if (b.finishedAt != null) return 1;
-      return b.lap * track.count + b.progress - a.lap * track.count - a.progress;
-    });
+    const racers = rankRacers(state.race.players, track.count);
+    if (state.room.multiplayer) leaderboard.update(state.room, racers, state.id);
     $('positionValue').innerHTML = `${racers.findIndex(p => p.id === state.id) + 1}<span>/${racers.length}</span>`;
     $('speedValue').textContent = Math.round(Math.max(0, me.speed) * .8);
     const icon = { boost: '⚡', shield: '⬡', trap: '▲' };
@@ -235,7 +235,7 @@ import { createScene } from '/scene3d.js';
       return { ...player, ...visual };
     });
     view.render({ players: renderPlayers, metadata: state.room?.players || [], race: state.race,
-      localId: state.id, time });
+      localId: state.id, multiplayer: state.room?.multiplayer, time });
     if (state.room?.phase === 'countdown')
       $('countdownNumber').textContent = Math.max(1, Math.ceil((state.room.startsAt - Date.now()) / 1000));
     requestAnimationFrame(draw);

@@ -1,8 +1,11 @@
+import { rankRacers, createLeaderboard } from '/leaderboard.js';
+
 (() => {
   'use strict';
   const track = window.KartTrack, $ = id => document.getElementById(id);
   const canvas = $('gameCanvas'), ctx = canvas.getContext('2d');
-  const panels = ['homePanel', 'lobbyPanel', 'resultPanel', 'countdown', 'raceHud', 'touchControls'];
+  const panels = ['homePanel', 'lobbyPanel', 'resultPanel', 'countdown', 'raceHud', 'leaderboard', 'touchControls'];
+  const leaderboard = createLeaderboard($('leaderboard'));
   const controls = { throttle: false, brake: false, left: false, right: false, drift: false };
   const state = { socket: null, id: null, room: null, race: null, display: new Map(), soloPending: false, toastTimer: 0 };
   const touchDevice = matchMedia('(pointer: coarse)').matches || window.innerWidth < 700;
@@ -103,6 +106,7 @@
     } else if (phase === 'countdown') visible('countdown', true);
     else if (phase === 'playing') {
       visible('raceHud', true);
+      visible('leaderboard', state.room.multiplayer);
       visible('touchControls', touchDevice && !localPlayer()?.finishedAt);
     } else if (phase === 'finished') {
       visible('resultPanel', true); resultRows();
@@ -116,11 +120,8 @@
     if (state.room?.phase !== 'playing') return;
     const me = localPlayer(); if (!me) return;
     $('lapValue').innerHTML = `${Math.min(3, me.lap + 1)}<span>/3</span>`;
-    const racers = [...state.race.players].sort((a, b) => {
-      if (a.finishedAt != null && b.finishedAt != null) return a.finishedAt - b.finishedAt;
-      if (a.finishedAt != null) return -1; if (b.finishedAt != null) return 1;
-      return b.lap * track.count + b.progress - a.lap * track.count - a.progress;
-    });
+    const racers = rankRacers(state.race.players, track.count);
+    if (state.room.multiplayer) leaderboard.update(state.room, racers, state.id);
     $('positionValue').innerHTML = `${racers.findIndex(p => p.id === state.id) + 1}<span>/${racers.length}</span>`;
     $('speedValue').textContent = Math.round(Math.max(0, me.speed) * .8);
     const icon = { boost: '⚡', shield: '⬡', trap: '▲' };
@@ -234,7 +235,8 @@
     ctx.strokeStyle = '#fff2cf'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(-7, 4); ctx.lineTo(7, 4); ctx.stroke(); ctx.restore();
   }
   function drawKart(p, meta, time) {
-    ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.angle);
+    const size = state.room?.multiplayer ? .6 : 1;
+    ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.angle); ctx.scale(size, size);
     if (p.boost) { ctx.fillStyle = '#ffc94d8c'; ctx.beginPath(); ctx.moveTo(-20, -7); ctx.lineTo(-43 - Math.sin(time*.03)*9, 0); ctx.lineTo(-20, 7); ctx.fill(); }
     ctx.fillStyle = '#102b26aa'; ctx.beginPath(); ctx.ellipse(4, 5, 29, 18, 0, 0, Math.PI*2); ctx.fill();
     ctx.fillStyle = '#1b2525';
@@ -248,9 +250,10 @@
     if (p.stunned) { ctx.fillStyle = '#fff4a1'; ctx.font = '22px system-ui'; ctx.fillText('✦', -1, -24); }
     ctx.restore();
     ctx.fillStyle = p.id === state.id ? '#fff5cb' : '#e9f1df'; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
-    ctx.font = '900 12px system-ui'; ctx.strokeStyle = '#163327'; ctx.lineWidth = 3;
+    ctx.font = state.room?.multiplayer ? '900 9px system-ui' : '900 12px system-ui';
+    ctx.strokeStyle = '#163327'; ctx.lineWidth = state.room?.multiplayer ? 2 : 3;
     const label = (meta?.name || 'Pembalap').slice(0, 12);
-    ctx.strokeText(label, p.x, p.y - 28); ctx.fillText(label, p.x, p.y - 28);
+    ctx.strokeText(label, p.x, p.y - 28 * size); ctx.fillText(label, p.x, p.y - 28 * size);
   }
   function smoothPlayers() {
     const target = state.race?.players || [];

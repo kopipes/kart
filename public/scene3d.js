@@ -201,12 +201,14 @@ export function createScene(canvas, track) {
   const boxGeo = new THREE.BoxGeometry(18, 18, 18), boxMat = material('#f6cb51');
   const boxEdgeGeo = new THREE.EdgesGeometry(boxGeo), boxEdgeMat = new THREE.LineBasicMaterial({ color: '#fff5b7' });
   const trapGeo = new THREE.ConeGeometry(15, 28, 4), trapMat = material('#f06b4d');
-  function syncCars(players, meta, time, localId) {
+  function syncCars(players, meta, time, localId, multiplayer) {
     const seen = new Set();
     for (const p of players) {
       seen.add(p.id);
       let car = cars.get(p.id);
       if (!car) { car = makeKart(meta.get(p.id)?.color || '#f7c843', meta.get(p.id)?.name || 'Pembalap'); cars.set(p.id, car); }
+      const size = multiplayer ? .6 : 1;
+      if (car.root.scale.x !== size) car.root.scale.setScalar(size);
       car.root.position.copy(at(p.x, p.y)); car.root.rotation.y = -p.angle;
       car.flame.visible = !!p.boost; car.shield.visible = !!p.shield;
       car.label.visible = p.id !== localId;
@@ -254,13 +256,13 @@ export function createScene(canvas, track) {
     width = w; height = h; renderer.setPixelRatio(pixelRatio); renderer.setSize(w, h, false);
     camera.aspect = w / h; camera.updateProjectionMatrix();
   }
-  function render({ players = [], metadata = [], race, localId, time }) {
+  function render({ players = [], metadata = [], race, localId, multiplayer = false, time }) {
     resize();
     const dt = lastTime ? Math.min(.1, (time - lastTime) / 1000) : 1/60;
     if (lastTime && time - lastTime < 100) frameAverage += ((time - lastTime) - frameAverage) * .05;
     lastTime = time;
     const meta = new Map(metadata.map(p => [p.id, p]));
-    syncCars(players, meta, time, localId);
+    syncCars(players, meta, time, localId, multiplayer);
     const boxData = race?.boxes || track.itemIndices.map((index, id) => ({ id, ...track.points[index], ready: true }));
     syncBoxes(boxData, time); syncTraps(race?.traps || []);
     let focus = players.find(p => p.id === localId);

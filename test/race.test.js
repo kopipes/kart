@@ -26,6 +26,7 @@ test('room limit, host start, three laps, item use, and rematch', () => {
   const host = peer(); act(host, { type: 'create', name: 'Host' });
   const room = host.room;
   assert.equal(room.players.length, 1);
+  assert.equal(room.multiplayer, false);
   const others = Array.from({ length: 8 }, peer);
   for (const p of others) act(p, { type: 'join', code: room.code, name: 'Guest' });
   assert.equal(room.players.length, 8);
@@ -34,6 +35,7 @@ test('room limit, host start, three laps, item use, and rematch', () => {
   assert.equal(room.phase, 'lobby');
   act(host, { type: 'start' });
   assert.equal(room.phase, 'countdown');
+  assert.equal(room.multiplayer, true);
   clearTimeout(room.countdownTimer);
   room.phase = 'playing';
   const racer = room.players[0];
